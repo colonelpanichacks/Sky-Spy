@@ -407,10 +407,10 @@ void loop() {
       last_heartbeat = current_millis;
     }
     
-    // Check if drone has gone out of range (no detection for 30 seconds)
+    // Check if drone has gone out of range (no detection for 7 seconds)
     bool drone_still_detected = false;
     for (int i = 0; i < MAX_UAVS; i++) {
-      if (uavs[i].mac[0] != 0 && (current_millis - uavs[i].last_seen) < 30000) {
+      if (uavs[i].mac[0] != 0 && (current_millis - uavs[i].last_seen) < 7000) {
         drone_still_detected = true;
         break;
       }
