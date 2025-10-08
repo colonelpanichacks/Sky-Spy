@@ -355,6 +355,11 @@ void setup() {
   setCpuFrequencyMhz(160);
   initializeSerial();
   initializeBuzzer();
+  
+  // Boot beep to confirm device is ready
+  tone(BUZZER_PIN, 800, 200);
+  delay(250);
+  
   nvs_flash_init();
   
   WiFi.mode(WIFI_STA);
