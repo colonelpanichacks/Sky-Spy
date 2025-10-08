@@ -288,22 +288,6 @@ pio run -e seeed_xiao_esp32s3
 - **Test with multimeter:** Should see PWM signal on GPIO3 during beeps
 - **Check serial output:** Should see "Buzzer initialized on GPIO3" message
 
-### High CPU/Memory Usage
-- Normal operation uses ~21% RAM
-- If issues persist, reduce `MAX_UAVS` (line 52) from 8 to 4
-
-## Performance Notes
-
-### Detection Latency
-- **WiFi Detection:** < 100ms (promiscuous mode, zero polling delay)
-- **BLE Detection:** < 1 second (1s scan interval)
-- **Buzzer Response:** < 50ms (dedicated task checks every 50ms)
-- **JSON Output:** Immediate (queued from ISR to printer task)
-
-### Signal Strength Guidelines
-- **> -50 dBm:** Very close (< 50m)
-- **-50 to -70 dBm:** Medium range (50-200m)
-- **< -70 dBm:** Far range (200-500m+)
 
 ## Legal & Safety
 
@@ -313,11 +297,6 @@ pio run -e seeed_xiao_esp32s3
 - Complies with FCC Part 15 (unlicensed receiver)
 - **Check local laws** regarding RF monitoring
 
-### Privacy & Ethics
-- RemoteID data is publicly broadcast by design
-- Do not use for harassment or stalking
-- Respect aviation safety zones
-- Report suspicious activity to authorities
 
 ## Credits & License
 
@@ -327,14 +306,6 @@ pio run -e seeed_xiao_esp32s3
 - **ASTM F3411:** Standard Specification for Remote ID and Tracking
 - **[Hackster.io Article](https://www.hackster.io/news/colonel-panic-s-oui-spy-is-a-slick-bluetooth-low-energy-scanner-or-a-foxhunting-handset-c16927adad71)** - OUI-SPY project overview
 
-### OUI-SPY Project
-This firmware is part of the **OUI-SPY ecosystem**, which includes:
-- **OUI-SPY Hardware:** Seeed Studio XIAO ESP32S3-based scanner with integrated buzzer
-- **Multi-Target BLE Scanner:** General-purpose BLE device tracking by OUI/MAC
-- **Foxhunter Mode:** Signal strength-based device location (radio direction finding)
-- **Web Interface:** Browser-based configuration (original OUI-SPY)
-
-This drone RemoteID variant maintains OUI-SPY's thread-safe, non-blocking buzzer architecture while adapting the scanning logic for OpenDroneID protocol detection.
 
 ### Dependencies
 - **Arduino Framework:** ESP32 Arduino Core v3.2.0
@@ -346,11 +317,6 @@ This drone RemoteID variant maintains OUI-SPY's thread-safe, non-blocking buzzer
 This project is provided as-is for educational and research purposes. Inherits licensing from:
 - OUI-SPY project (original hardware/software design)
 - OpenDroneID libraries (Apache 2.0)
-
-### Authors
-- **Colonel Panic** - Original OUI-SPY project creator
-- **OUI-SPY Community** - Hardware design and BLE scanning implementation
-- **This Fork** - Drone RemoteID adaptation with WiFi promiscuous mode and JSON serial output
 
 ## Related Projects
 
@@ -372,22 +338,4 @@ For issues, questions, or contributions:
 - Provide serial monitor output when reporting bugs
 - Include board type and PlatformIO version
 
-## Version History
-
-### v2.0 - USB Serial Edition (Current)
-- Removed Meshtastic/Serial1 mesh functionality
-- Added non-blocking buzzer alerts
-- Thread-safe ISR callbacks with mutex protection
-- Optimized for USB serial JSON output
-- Compatible with mesh-mapper.py visualization
-
-### v1.0 - Original T-Deck Version
-- Dual-core WiFi + BLE scanning
-- Meshtastic mesh integration via Serial1
-- SD card map tile support
-- 320x240 TFT display interface
-
----
-
-**Happy Drone Spotting!** 🚁✈️
 
