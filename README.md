@@ -72,7 +72,7 @@ The OUI-SPY board is a ready-to-use ESP32-S3 platform with:
 ### Audio Alerts (Non-Blocking)
 - **Detection Alert:** 3 quick high-pitched beeps (1000 Hz) on first detection
 - **Heartbeat:** Double beep (600 Hz) every 5 seconds while drone is in range
-- **Auto-Stop:** Heartbeat stops after 30 seconds with no drone detected
+- **Auto-Stop:** Heartbeat stops after 7 seconds with no drone detected
 - **Zero Latency:** Dedicated FreeRTOS task ensures buzzer never delays detection
 
 ### Thread-Safe Architecture
