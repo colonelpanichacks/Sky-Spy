@@ -1,22 +1,46 @@
-# Drone RemoteID Scanner - OUI-SPY Edition
+# Sky-Spy
 
-**A port of the OUI-SPY project for drone RemoteID detection**
+<p align="center">
+  <img src="eagle.png" alt="Sky-Spy" width="600"/>
+</p>
 
-This is a specialized version of Colonel Panic's [OUI-SPY BLE scanner](https://github.com/colonelpanic8/oui-spy) adapted for drone RemoteID detection. Instead of general BLE device tracking, this firmware scans for drone RemoteID broadcasts over WiFi and Bluetooth Low Energy, outputting JSON data via USB serial for real-time mapping applications.
+**Official OUI-SPY firmware for drone RemoteID detection and mapping**
 
-**Key Differences from OUI-SPY:**
+Sky-Spy is one of the official firmware options for the [OUI-SPY hardware platform](https://github.com/colonelpanichacks/OUI-SPY). This specialized firmware detects and tracks drones broadcasting RemoteID via WiFi and Bluetooth Low Energy, outputting real-time JSON data for visualization with mesh-mapper.py.
+
+## OUI-SPY Firmware Family
+
+Sky-Spy is part of the OUI-SPY firmware ecosystem:
+- **[OUI-SPY Detector](https://github.com/colonelpanichacks/ouispy-detector)** - Multi-target BLE scanner with OUI filtering
+- **[OUI-SPY Foxhunter](https://github.com/colonelpanichacks/ouispy-foxhunter)** - Precision proximity tracker for radio direction finding
+- **[OUI-SPY UniPwn](https://github.com/colonelpanichacks/Oui-Spy-UniPwn)** - Unitree robot exploitation system
+- **[Flock You](https://github.com/colonelpanichacks/flock-you)** - Flock Safety surveillance camera detection
+- **[Sky-Spy](https://github.com/colonelpanichacks/Sky-Spy)** - Drone RemoteID detection (this firmware)
+
+**What Makes Sky-Spy Different:**
 - Targets OpenDroneID protocol (ASTM F3411) instead of general BLE devices
-- WiFi promiscuous mode scanning for WiFi-based RemoteID
-- JSON output format for mesh-mapper.py integration
-- Optimized for drone detection with GPS coordinate extraction
-- Removed mesh/Meshtastic functionality for pure USB serial operation
+- WiFi promiscuous mode scanning for WiFi-based RemoteID broadcasts
+- JSON output format for mesh-mapper.py real-time visualization
+- Extracts GPS coordinates, altitude, speed, heading from drone telemetry
+- Tracks operator/pilot location and drone identification
+- Multi-drone tracking (up to 8 simultaneous)
 
-Like OUI-SPY, this project features audio alerts with a non-blocking buzzer implementation running on a dedicated FreeRTOS task.
+Like all OUI-SPY firmware, Sky-Spy features audio alerts with a non-blocking buzzer implementation running on a dedicated FreeRTOS task.
 
 ## Hardware Requirements
 
-### Supported Boards
-- **Seeed Studio XIAO ESP32-S3** (Primary - Recommended)
+### OUI-SPY Board (Recommended)
+**Get the official hardware:** [Tindie](https://www.tindie.com) | [colonelpanic.tech](https://colonelpanic.tech)
+
+The OUI-SPY board is a ready-to-use ESP32-S3 platform with:
+- Integrated buzzer with PWM control
+- Built-in antenna with external antenna option
+- USB-C power and programming
+- Compact PCB design with sick artwork
+- No additional components required
+
+### Compatible Development Boards
+- **Seeed Studio XIAO ESP32-S3** (Primary)
   - ESP32-S3 dual-core MCU @ 240MHz
   - 8MB Flash, 8MB PSRAM
   - WiFi & Bluetooth 5.0 (LE)
@@ -289,6 +313,9 @@ pio run -e seeed_xiao_esp32s3
 - **Check serial output:** Should see "Buzzer initialized on GPIO3" message
 
 
+
+
+
 ## Legal & Safety
 
 ### Regulations
@@ -296,6 +323,7 @@ pio run -e seeed_xiao_esp32s3
 - Does not transmit or interfere with drone operations
 - Complies with FCC Part 15 (unlicensed receiver)
 - **Check local laws** regarding RF monitoring
+
 
 
 ## Credits & License
@@ -306,6 +334,17 @@ pio run -e seeed_xiao_esp32s3
 - **ASTM F3411:** Standard Specification for Remote ID and Tracking
 - **[Hackster.io Article](https://www.hackster.io/news/colonel-panic-s-oui-spy-is-a-slick-bluetooth-low-energy-scanner-or-a-foxhunting-handset-c16927adad71)** - OUI-SPY project overview
 
+### OUI-SPY Firmware Ecosystem
+Sky-Spy is an **official OUI-SPY firmware** from [colonelpanichacks](https://github.com/colonelpanichacks). The OUI-SPY platform supports multiple firmware options:
+
+- **[OUI-SPY Main Repository](https://github.com/colonelpanichacks/OUI-SPY)** - Hardware info and firmware overview
+- **[OUI-SPY Detector](https://github.com/colonelpanichacks/ouispy-detector)** - Multi-target BLE scanner with web configuration
+- **[OUI-SPY Foxhunter](https://github.com/colonelpanichacks/ouispy-foxhunter)** - RSSI-based proximity tracking for direction finding
+- **[OUI-SPY UniPwn](https://github.com/colonelpanichacks/Oui-Spy-UniPwn)** - Unitree robot security assessment tools
+- **[Flock You](https://github.com/colonelpanichacks/flock-you)** - Surveillance camera detection system
+- **[Sky-Spy](https://github.com/colonelpanichacks/Sky-Spy)** - Drone RemoteID detection (this project)
+
+All OUI-SPY firmware shares the same thread-safe, non-blocking buzzer architecture and professional FreeRTOS task design.
 
 ### Dependencies
 - **Arduino Framework:** ESP32 Arduino Core v3.2.0
@@ -318,16 +357,15 @@ This project is provided as-is for educational and research purposes. Inherits l
 - OUI-SPY project (original hardware/software design)
 - OpenDroneID libraries (Apache 2.0)
 
+
+
 ## Related Projects
 
 ### OUI-SPY Ecosystem
 - **[OUI-SPY Main Project](https://github.com/colonelpanic8/oui-spy)** - Original BLE scanner with foxhunting mode
 - **[OUI-SPY on Hackster.io](https://www.hackster.io/news/colonel-panic-s-oui-spy-is-a-slick-bluetooth-low-energy-scanner-or-a-foxhunting-handset-c16927adad71)** - Project overview and documentation
 
-### Drone Detection Tools
-- **mesh-mapper.py** - Visualization tool for real-time drone tracking
-- **OpenDroneID** - Open-source RemoteID protocol implementation
-- **Flock-You** - Flock Safety camera detection (similar hardware architecture)
+
 
 ## Support
 
@@ -337,5 +375,6 @@ For issues, questions, or contributions:
 - Review troubleshooting section above
 - Provide serial monitor output when reporting bugs
 - Include board type and PlatformIO version
+
 
 
