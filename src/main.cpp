@@ -184,11 +184,21 @@ void send_json_fast(const id_data *UAV) {
   snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
            UAV->mac[0], UAV->mac[1], UAV->mac[2],
            UAV->mac[3], UAV->mac[4], UAV->mac[5]);
-  char json_msg[256];
-  snprintf(json_msg, sizeof(json_msg),
-    "{\"mac\":\"%s\",\"rssi\":%d,\"drone_lat\":%.6f,\"drone_long\":%.6f,\"drone_altitude\":%d,\"pilot_lat\":%.6f,\"pilot_long\":%.6f,\"basic_id\":\"%s\"}",
+  
+  // Create properly formatted single-line JSON with consistent structure
+  char json_msg[512]; // Increased buffer size for additional fields
+  int len = snprintf(json_msg, sizeof(json_msg),
+    "{\"mac\":\"%s\",\"rssi\":%d,\"drone_lat\":%.6f,\"drone_long\":%.6f,\"drone_altitude\":%d,\"pilot_lat\":%.6f,\"pilot_long\":%.6f,\"basic_id\":\"%s\",\"operator_id\":\"%s\",\"height_agl\":%d,\"speed\":%d,\"heading\":%d,\"timestamp\":%lu}",
     mac_str, UAV->rssi, UAV->lat_d, UAV->long_d, UAV->altitude_msl,
-    UAV->base_lat_d, UAV->base_long_d, UAV->uav_id);
+    UAV->base_lat_d, UAV->base_long_d, UAV->uav_id, UAV->op_id,
+    UAV->height_agl, UAV->speed, UAV->heading, UAV->last_seen);
+  
+  // Check for buffer overflow
+  if (len >= sizeof(json_msg)) {
+    Serial.println("{\"error\":\"JSON buffer overflow\"}");
+    return;
+  }
+  
   Serial.println(json_msg);
 }
 
@@ -389,7 +399,11 @@ void loop() {
   
   // Status message every 60 seconds
   if ((current_millis - last_status) > 60000UL) {
-    Serial.println("{\"   [+] Device is active and scanning...\"}");
+    char status_msg[128];
+    snprintf(status_msg, sizeof(status_msg), 
+      "{\"status\":\"active\",\"message\":\"Device is active and scanning\",\"uptime_ms\":%lu}",
+      current_millis);
+    Serial.println(status_msg);
     last_status = current_millis;
   }
   
