@@ -20,11 +20,18 @@
 // Buzzer configuration
 #define BUZZER_PIN 3  // GPIO3 (D2) - PWM capable pin on Xiao ESP32 S3
 
+// LED configuration - using only onboard orange LED
+#define LED_PIN 21    // GPIO21 - Built-in orange LED on Xiao ESP32 S3 (inverted logic)
+
 // Audio Configuration
 #define DETECT_FREQ 1000  // Detection alert - high pitch (faster beeps)
 #define HEARTBEAT_FREQ 600 // Heartbeat pulse frequency
 #define DETECT_BEEP_DURATION 150 // Detection beep duration (faster)
 #define HEARTBEAT_DURATION 100   // Short heartbeat pulse
+
+// LED timing configuration - sync with buzzer
+#define LED_BLINK_DETECT 150  // Same as DETECT_BEEP_DURATION
+#define LED_BLINK_HEARTBEAT 100 // Same as HEARTBEAT_DURATION
 
 struct id_data {
   uint8_t  mac[6];
@@ -46,6 +53,11 @@ struct id_data {
 void callback(void *, wifi_promiscuous_pkt_type_t);
 void send_json_fast(const id_data *UAV);
 void buzzerTask(void *parameter);
+void ledTask(void *parameter);
+void initializeLEDs();
+void ledOn();
+void ledOff();
+void blinkLED(int duration, int count);
 
 #define MAX_UAVS 8
 id_data uavs[MAX_UAVS] = {0};
@@ -54,10 +66,12 @@ ODID_UAS_Data UAS_data;
 unsigned long last_status = 0;
 unsigned long last_heartbeat = 0;
 
-// Thread-safe flags for buzzer (volatile for ISR access)
+// Thread-safe flags for buzzer and LED (volatile for ISR access)
 volatile bool device_in_range = false;
 volatile bool trigger_detection_beep = false;
 volatile bool trigger_heartbeat_beep = false;
+volatile bool trigger_detection_led = false;
+volatile bool trigger_heartbeat_led = false;
 static portMUX_TYPE buzzerMux = portMUX_INITIALIZER_UNLOCKED;
 
 static QueueHandle_t printQueue;
@@ -124,10 +138,11 @@ public:
       }
       UAV->flag = 1;
       
-      // Trigger buzzer alert (thread-safe, non-blocking)
+      // Trigger buzzer and LED alerts (thread-safe, non-blocking)
       portENTER_CRITICAL_ISR(&buzzerMux);
       if (!device_in_range) {
         trigger_detection_beep = true;
+        trigger_detection_led = true;
         device_in_range = true;
         last_heartbeat = millis();
       }
@@ -153,12 +168,10 @@ void buzzerTask(void *parameter) {
     portEXIT_CRITICAL(&buzzerMux);
     
     if (do_detection) {
-      Serial.println("DRONE DETECTED! Playing alert sequence: 3 quick beeps");
       for (int i = 0; i < 3; i++) {
         tone(BUZZER_PIN, DETECT_FREQ, DETECT_BEEP_DURATION);
         vTaskDelay(pdMS_TO_TICKS(200)); // Non-blocking FreeRTOS delay
       }
-      Serial.println("Detection complete - drone identified!");
     }
     
     // Check for heartbeat beep trigger
@@ -168,13 +181,70 @@ void buzzerTask(void *parameter) {
     portEXIT_CRITICAL(&buzzerMux);
     
     if (do_heartbeat) {
-      Serial.println("Heartbeat: Drone still in range");
       tone(BUZZER_PIN, HEARTBEAT_FREQ, HEARTBEAT_DURATION);
       vTaskDelay(pdMS_TO_TICKS(150));
       tone(BUZZER_PIN, HEARTBEAT_FREQ, HEARTBEAT_DURATION);
     }
     
     // Check for new beep triggers every 50ms
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
+}
+
+// LED control functions - inverted logic for XIAO ESP32-S3
+void ledOn() {
+  digitalWrite(LED_PIN, LOW);  // LOW = LED ON for Xiao ESP32-S3
+}
+
+void ledOff() {
+  digitalWrite(LED_PIN, HIGH); // HIGH = LED OFF for Xiao ESP32-S3
+}
+
+void blinkLED(int duration, int count) {
+  for (int i = 0; i < count; i++) {
+    ledOn();
+    vTaskDelay(pdMS_TO_TICKS(duration));
+    ledOff();
+    if (i < count - 1) vTaskDelay(pdMS_TO_TICKS(duration));
+  }
+}
+
+// Dedicated LED task - sync with buzzer timing
+void ledTask(void *parameter) {
+  for (;;) {
+    // Check for detection LED trigger - sync with buzzer
+    portENTER_CRITICAL(&buzzerMux);
+    bool do_detection_led = trigger_detection_led;
+    if (do_detection_led) trigger_detection_led = false;
+    portEXIT_CRITICAL(&buzzerMux);
+    
+    if (do_detection_led) {
+      // Flash LED at same rate as buzzer (3 quick flashes)
+      for (int i = 0; i < 3; i++) {
+        ledOn();
+        vTaskDelay(pdMS_TO_TICKS(LED_BLINK_DETECT));
+        ledOff();
+        if (i < 2) vTaskDelay(pdMS_TO_TICKS(200)); // Same 200ms gap as buzzer
+      }
+    }
+    
+    // Check for heartbeat LED trigger - sync with buzzer
+    portENTER_CRITICAL(&buzzerMux);
+    bool do_heartbeat_led = trigger_heartbeat_led;
+    if (do_heartbeat_led) trigger_heartbeat_led = false;
+    portEXIT_CRITICAL(&buzzerMux);
+    
+    if (do_heartbeat_led) {
+      // Flash LED at same rate as buzzer (2 quick flashes)
+      for (int i = 0; i < 2; i++) {
+        ledOn();
+        vTaskDelay(pdMS_TO_TICKS(LED_BLINK_HEARTBEAT));
+        ledOff();
+        if (i < 1) vTaskDelay(pdMS_TO_TICKS(150)); // Same 150ms gap as buzzer
+      }
+    }
+    
+    // Check for new LED triggers every 50ms
     vTaskDelay(pdMS_TO_TICKS(50));
   }
 }
@@ -249,14 +319,15 @@ void callback(void *buffer, wifi_promiscuous_pkt_type_t type) {
       *storedUAV = UAV;
       storedUAV->flag = 1;
       
-      // Trigger buzzer alert (thread-safe, non-blocking)
-      portENTER_CRITICAL_ISR(&buzzerMux);
-      if (!device_in_range) {
-        trigger_detection_beep = true;
-        device_in_range = true;
-        last_heartbeat = millis();
-      }
-      portEXIT_CRITICAL_ISR(&buzzerMux);
+          // Trigger buzzer and LED alerts (thread-safe, non-blocking)
+          portENTER_CRITICAL_ISR(&buzzerMux);
+          if (!device_in_range) {
+            trigger_detection_beep = true;
+            trigger_detection_led = true;
+            device_in_range = true;
+            last_heartbeat = millis();
+          }
+          portEXIT_CRITICAL_ISR(&buzzerMux);
       
       {
         id_data tmp = *storedUAV;
@@ -308,10 +379,11 @@ void callback(void *buffer, wifi_promiscuous_pkt_type_t type) {
           *storedUAV = UAV;
           storedUAV->flag = 1;
           
-          // Trigger buzzer alert (thread-safe, non-blocking)
+          // Trigger buzzer and LED alerts (thread-safe, non-blocking)
           portENTER_CRITICAL_ISR(&buzzerMux);
           if (!device_in_range) {
             trigger_detection_beep = true;
+            trigger_detection_led = true;
             device_in_range = true;
             last_heartbeat = millis();
           }
@@ -348,17 +420,27 @@ void initializeSerial() {
 void initializeBuzzer() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
-  Serial.println("Buzzer initialized on GPIO3");
+}
+
+void initializeLEDs() {
+  pinMode(LED_PIN, OUTPUT);
+  
+  // Turn off LED initially
+  ledOff();
 }
 
 void setup() {
   setCpuFrequencyMhz(160);
   initializeSerial();
   initializeBuzzer();
+  initializeLEDs();
   
-  // Boot beep to confirm device is ready
+  // Boot beep and LED flash to confirm device is ready
   tone(BUZZER_PIN, 800, 200);
-  delay(250);
+  ledOn();
+  delay(200);
+  ledOff();
+  delay(50);
   
   nvs_flash_init();
   
@@ -380,6 +462,7 @@ void setup() {
   xTaskCreatePinnedToCore(wifiProcessTask, "WiFiProcessTask", 10000, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(printerTask, "PrinterTask", 10000, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(buzzerTask, "BuzzerTask", 4096, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(ledTask, "LEDTask", 4096, NULL, 1, NULL, 1);
   
   memset(uavs, 0, sizeof(uavs));
 }
@@ -403,6 +486,7 @@ void loop() {
     if (current_millis - last_heartbeat >= 5000) {
       portENTER_CRITICAL(&buzzerMux);
       trigger_heartbeat_beep = true;
+      trigger_heartbeat_led = true;
       portEXIT_CRITICAL(&buzzerMux);
       last_heartbeat = current_millis;
     }
