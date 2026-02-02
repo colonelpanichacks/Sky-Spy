@@ -8,6 +8,15 @@
 
 Sky-Spy is one of the official firmware options for the [OUI-SPY hardware platform](https://github.com/colonelpanichacks/OUI-SPY). This specialized firmware detects and tracks drones broadcasting RemoteID via WiFi and Bluetooth Low Energy, outputting real-time JSON data for visualization with mesh-mapper.py.
 
+## NEW: Dual-Band WiFi Support (2.4GHz + 5GHz)
+
+Sky-Spy now supports the **XIAO ESP32-C5** with dual-band WiFi 6, enabling detection of drones broadcasting RemoteID on both 2.4GHz and 5GHz bands simultaneously. This future-proofs your detector as more drones adopt 5GHz RemoteID.
+
+| Board | WiFi Bands | BLE | Recommended For |
+|-------|------------|-----|-----------------|
+| **XIAO ESP32-C5** | 2.4GHz + 5GHz | Yes | New builds (dual-band) |
+| XIAO ESP32-S3 | 2.4GHz only | Yes | Existing OUI-SPY boards |
+
 ## OUI-SPY Firmware Family
 
 Sky-Spy is part of the OUI-SPY firmware ecosystem:
@@ -19,6 +28,7 @@ Sky-Spy is part of the OUI-SPY firmware ecosystem:
 
 **What Makes Sky-Spy Different:**
 - Targets OpenDroneID protocol (ASTM F3411) instead of general BLE devices
+- **Dual-band WiFi scanning** (2.4GHz + 5GHz) on ESP32-C5
 - WiFi promiscuous mode scanning for WiFi-based RemoteID broadcasts
 - JSON output format for mesh-mapper.py real-time visualization
 - Extracts GPS coordinates, altitude, speed, heading from drone telemetry
@@ -32,42 +42,64 @@ Like all OUI-SPY firmware, Sky-Spy features audio alerts with a non-blocking buz
 ### OUI-SPY Board (Recommended)
 **Get the official hardware:** [Tindie](https://www.tindie.com) | [colonelpanic.tech](https://colonelpanic.tech)
 
-The OUI-SPY board is a ready-to-use ESP32-S3 platform with:
+The OUI-SPY board is a ready-to-use platform with:
 - Integrated buzzer with PWM control
 - Built-in antenna with external antenna option
 - USB-C power and programming
 - Compact PCB design with sick artwork
-- No additional components required
+- Compatible with both ESP32-S3 and ESP32-C5 XIAO modules
 
 ### Compatible Development Boards
-- **Seeed Studio XIAO ESP32-S3** (Primary)
+
+- **Seeed Studio XIAO ESP32-C5** (Recommended - Dual-Band)
+  - ESP32-C5 RISC-V MCU
+  - **WiFi 6 dual-band (2.4GHz + 5GHz)**
+  - Bluetooth 5 (LE) + IEEE 802.15.4
+  - USB-C connectivity
+  - [Buy from Seeed Studio](https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32C5-p-6609.html)
+  
+- **Seeed Studio XIAO ESP32-S3** (Legacy - Single-Band)
   - ESP32-S3 dual-core MCU @ 240MHz
   - 8MB Flash, 8MB PSRAM
-  - WiFi & Bluetooth 5.0 (LE)
+  - WiFi 2.4GHz & Bluetooth 5.0 (LE)
   - USB-C connectivity
-  
-- **Seeed Studio XIAO ESP32-C6** (Alternative)
-  - ESP32-C6 RISC-V MCU
-  - WiFi 6 & Bluetooth 5.3 (LE)
 
 ### Buzzer Connection
-- **Pin:** GPIO3 (D2) - PWM capable
+Both boards use the same physical pin (D2) for OUI-SPY PCB compatibility:
+
+| Board | Physical Pin | GPIO | LED GPIO |
+|-------|--------------|------|----------|
+| ESP32-C5 | D2 | GPIO4 | GPIO8 |
+| ESP32-S3 | D2 | GPIO3 | GPIO21 |
+
 - **Type:** Passive buzzer (requires PWM signal)
-- **Connection:** Buzzer positive to GPIO3, negative to GND
+- **Connection:** Buzzer positive to D2, negative to GND
 - **Optional:** Add 100Ω resistor in series for volume control
 
 ## Features
 
 ### Drone Detection
-- **Dual-Protocol Scanning:**
-  - WiFi promiscuous mode (802.11 beacon/probe frames)
+- **Triple-Protocol Scanning:**
+  - WiFi 2.4GHz promiscuous mode (802.11 beacon/NAN frames)
+  - WiFi 5GHz promiscuous mode (ESP32-C5 only)
   - Bluetooth Low Energy (BLE) advertisements
+- **Seamless Dual-Band Operation:** Fast channel hopping (~180ms cycle) ensures no missed detections
 - **OpenDroneID Protocol Support:**
   - Basic ID (drone serial/CAA registration)
   - Location data (GPS coordinates, altitude, speed, heading)
   - System data (operator location)
   - Operator ID
 - **Multi-Drone Tracking:** Simultaneously track up to 8 drones
+
+### Dual-Band Channel Coverage (ESP32-C5)
+
+| Band | Channels | Dwell Time | Purpose |
+|------|----------|------------|---------|
+| 2.4GHz | Channel 6 | 30ms | WiFi NAN RemoteID standard |
+| 5GHz | 149, 153, 157, 161, 165 | 30ms each | UNII-3 band RemoteID |
+| BLE | All | Continuous | Bluetooth RemoteID |
+
+Total cycle time: ~180ms (samples each channel multiple times per second)
 
 ### Audio Alerts (Non-Blocking)
 - **Detection Alert:** 3 quick high-pitched beeps (1000 Hz) on first detection
@@ -78,9 +110,9 @@ The OUI-SPY board is a ready-to-use ESP32-S3 platform with:
 ### Thread-Safe Architecture
 - **ISR-Safe Design:** All callbacks use critical sections for atomic flag updates
 - **Race-Free Operation:** Mutex protection for all shared variables
-- **Dual-Core Utilization:**
-  - **Core 0:** WiFi promiscuous mode packet processing
-  - **Core 1:** BLE scanning, JSON output, buzzer control
+- **Multi-Core Support:**
+  - **ESP32-S3:** Dual-core task distribution
+  - **ESP32-C5:** Single-core RISC-V with optimized scheduling
 
 ## Installation
 
@@ -93,7 +125,8 @@ The OUI-SPY board is a ready-to-use ESP32-S3 platform with:
 
 1. **Clone or download this repository**
    ```bash
-   cd /path/to/remoteid-mesh-dualcore
+   git clone https://github.com/colonelpanichacks/Sky-Spy.git
+   cd Sky-Spy
    ```
 
 2. **Install dependencies** (automatic via PlatformIO)
@@ -103,22 +136,25 @@ The OUI-SPY board is a ready-to-use ESP32-S3 platform with:
 
 3. **Build firmware**
    ```bash
-   # For ESP32-S3 (recommended)
-   pio run -e seeed_xiao_esp32s3
+   # For ESP32-C5 (dual-band - recommended)
+   pio run -e seeed_xiao_esp32c5
    
-   # For ESP32-C6
-   pio run -e seeed_xiao_esp32c6
+   # For ESP32-S3 (single-band - legacy)
+   pio run -e seeed_xiao_esp32s3
    ```
 
 4. **Flash to device**
    ```bash
-   # Auto-detects USB port
+   # ESP32-C5 (dual-band)
+   pio run -e seeed_xiao_esp32c5 -t upload
+   
+   # ESP32-S3 (single-band)
    pio run -e seeed_xiao_esp32s3 -t upload
    ```
 
 5. **Monitor serial output**
    ```bash
-   pio device monitor -e seeed_xiao_esp32s3
+   pio device monitor
    ```
 
 ## Usage
@@ -131,6 +167,8 @@ The device outputs JSON data at **115200 baud** via USB serial. Each detected dr
 {
   "mac": "aa:bb:cc:dd:ee:ff",
   "rssi": -45,
+  "band": "5GHz",
+  "channel": 149,
   "drone_lat": 37.7749,
   "drone_long": -122.4194,
   "drone_altitude": 120,
@@ -141,16 +179,20 @@ The device outputs JSON data at **115200 baud** via USB serial. Each detected dr
 ```
 
 ### Field Descriptions
-- `mac`: Drone's MAC address (WiFi or BLE)
-- `rssi`: Signal strength in dBm (closer = higher)
-- `drone_lat/drone_long`: Current drone GPS coordinates
-- `drone_altitude`: Altitude above mean sea level (meters)
-- `pilot_lat/pilot_long`: Operator/takeoff location
-- `basic_id`: Drone serial number or registration ID
+| Field | Description |
+|-------|-------------|
+| `mac` | Drone's MAC address (WiFi or BLE) |
+| `rssi` | Signal strength in dBm (closer = higher) |
+| `band` | Detection source: `"2.4GHz"`, `"5GHz"`, or `"BLE"` |
+| `channel` | WiFi channel (0 for BLE detections) |
+| `drone_lat/drone_long` | Current drone GPS coordinates |
+| `drone_altitude` | Altitude above mean sea level (meters) |
+| `pilot_lat/pilot_long` | Operator/takeoff location |
+| `basic_id` | Drone serial number or registration ID |
 
 ### Status Messages
 ```json
-{"   [+] Device is active and scanning..."}
+{"status":"active","mode":"dual-band","bands":["2.4GHz","5GHz","BLE"]}
 ```
 Sent every 60 seconds to confirm device operation.
 
@@ -161,7 +203,9 @@ This scanner is designed as a USB serial data source for the mesh-mapper.py visu
 1. **Connect scanner** via USB
 2. **Run mesh-mapper.py** with appropriate serial port:
    ```bash
-   python mesh-mapper.py --port /dev/cu.usbmodem1101
+   python mesh-mapper.py --port /dev/cu.usbmodem1101   # macOS
+   python mesh-mapper.py --port COM3                   # Windows
+   python mesh-mapper.py --port /dev/ttyUSB0           # Linux
    ```
 3. **View real-time drone positions** on the map interface
 
@@ -170,41 +214,57 @@ This scanner is designed as a USB serial data source for the mesh-mapper.py visu
 ### Detection Sequence
 1. **Drone detected** → 3 quick beeps (150ms each @ 1000 Hz)
 2. **Stays in range** → Double beep every 5 seconds (100ms each @ 600 Hz)
-3. **Out of range** → Heartbeat stops after 30 seconds of no detection
+3. **Out of range** → Heartbeat stops after 7 seconds of no detection
 
 ### Disabling Buzzer
-To disable audio alerts, comment out line 377 in `main.cpp`:
+Comment out the buzzer task creation in `main.cpp`:
 ```cpp
-// xTaskCreatePinnedToCore(buzzerTask, "BuzzerTask", 4096, NULL, 1, NULL, 1);
+// xTaskCreate(buzzerTask, "BuzzerTask", 4096, NULL, 1, NULL);
 ```
 
 ## Technical Details
 
 ### Detection Methods
 
-**WiFi Promiscuous Mode:**
-- Listens on channel 6 (WiFi RemoteID standard channel)
-- Captures beacon frames and probe requests
-- Parses OpenDroneID NAN action frames
-- Extracts vendor-specific information elements
+**WiFi Dual-Band Scanning (ESP32-C5):**
+- Fast channel hopping between 2.4GHz and 5GHz bands
+- 30ms dwell time per channel for optimal packet capture
+- Captures beacon frames and NAN action frames
+- Parses OpenDroneID vendor-specific information elements
 
-**BLE Scanning:**
+**WiFi Single-Band Scanning (ESP32-S3):**
+- Fixed on channel 6 (WiFi NAN RemoteID standard)
+- Captures beacon frames and NAN action frames
+- Parses OpenDroneID vendor-specific information elements
+
+**BLE Scanning (Both Boards):**
 - Active scanning with 100ms interval
 - Monitors ASTM F3411 RemoteID advertisements
 - Service UUID: 0xFFFA (RemoteID identifier)
 - 1-second scan duration with continuous operation
 
-### Memory Usage
-- **RAM:** 21.0% (68,928 / 327,680 bytes)
-- **Flash:** 42.9% (1,433,678 / 3,342,336 bytes)
-- **Stack Sizes:**
-  - BLE Task: 10KB
-  - WiFi Task: 10KB
-  - Printer Task: 10KB
-  - Buzzer Task: 4KB
-
 ### FreeRTOS Task Architecture
 
+**ESP32-C5 (Single-Core RISC-V):**
+```
+┌─────────────────────────────────────────────────────┐
+│              Sky-Spy ESP32-C5                       │
+├─────────────────────────────────────────────────────┤
+│  Channel Hop Task (High Priority)                   │
+│  ├─ 2.4GHz Ch6   ─┐                                 │
+│  ├─ 5GHz Ch149    │                                 │
+│  ├─ 5GHz Ch153    ├──► Promiscuous Callback ──┐     │
+│  ├─ 5GHz Ch157    │    (NAN + Beacon frames)  │     │
+│  ├─ 5GHz Ch161    │                           │     │
+│  └─ 5GHz Ch165  ──┘                           │     │
+│                                               ▼     │
+│  BLE Scan Task ─────────────────────────► Print ──► │ USB JSON
+│  Buzzer Task                               Queue    │
+│  Main Loop (Heartbeat Monitor)                      │
+└─────────────────────────────────────────────────────┘
+```
+
+**ESP32-S3 (Dual-Core):**
 ```
 Core 0:                         Core 1:
 ┌──────────────────┐           ┌──────────────────┐
@@ -231,55 +291,56 @@ Core 0:                         Core 1:
 
 ### Project Structure
 ```
-remoteid-mesh-dualcore/
+Sky-Spy/
 ├── src/
 │   ├── main.cpp           # Main application code
 │   ├── opendroneid.h      # OpenDroneID protocol definitions
 │   ├── opendroneid.c      # Protocol parsing functions
 │   ├── odid_wifi.h        # WiFi-specific RemoteID structures
 │   └── wifi.c             # WiFi helper functions
-├── include/               # Additional headers (empty by default)
-├── lib/                   # Project-specific libraries (empty by default)
-├── test/                  # Unit tests (empty by default)
+├── include/               # Additional headers
+├── lib/                   # Project-specific libraries
+├── test/                  # Unit tests
 ├── platformio.ini         # Build configuration
+├── mesh-mapper.py         # Visualization tool
 └── README.md              # This file
 ```
 
-**Note:** Build artifacts (`.pio/`, `*.bin`, `*.elf`) are automatically generated during compilation and should not be committed to version control.
-
 ### Building for Different Boards
 
-**ESP32-S3 (Default):**
+**ESP32-C5 (Dual-Band - Recommended):**
+```bash
+pio run -e seeed_xiao_esp32c5 -t upload
+```
+
+**ESP32-S3 (Single-Band - Legacy):**
 ```bash
 pio run -e seeed_xiao_esp32s3 -t upload
 ```
 
-**ESP32-C6:**
-```bash
-pio run -e seeed_xiao_esp32c6 -t upload
-```
-
 ### Customization
 
-**Change Buzzer Pin:**
-Edit line 21 in `main.cpp`:
+**Adjust Channel Dwell Time (ESP32-C5):**
 ```cpp
-#define BUZZER_PIN 3  // Change to your desired GPIO
+#define DWELL_TIME_MS 30  // Milliseconds per channel (default: 30)
+```
+
+**Modify 5GHz Channels:**
+```cpp
+static const uint8_t channels_5ghz[] = {149, 153, 157, 161, 165};
 ```
 
 **Adjust Heartbeat Interval:**
-Edit line 397 in `main.cpp`:
 ```cpp
 if (current_millis - last_heartbeat >= 5000) {  // Change 5000 to desired ms
 ```
 
 **Modify Beep Frequencies:**
-Edit lines 24-27 in `main.cpp`:
 ```cpp
-#define DETECT_FREQ 1000      // Detection alert frequency (Hz)
-#define HEARTBEAT_FREQ 600    // Heartbeat frequency (Hz)
-#define DETECT_BEEP_DURATION 150   // Beep duration (ms)
-#define HEARTBEAT_DURATION 100     // Heartbeat duration (ms)
+#define DETECT_FREQ 1000          // Detection alert frequency (Hz)
+#define HEARTBEAT_FREQ 600        // Heartbeat frequency (Hz)
+#define DETECT_BEEP_DURATION 150  // Beep duration (ms)
+#define HEARTBEAT_DURATION 100    // Heartbeat duration (ms)
 ```
 
 ## Troubleshooting
@@ -289,6 +350,7 @@ Edit lines 24-27 in `main.cpp`:
 - **Verify RemoteID compliance:** Not all drones broadcast RemoteID
 - **Check region:** RemoteID may not be mandated in your area
 - **Distance:** Typical range is 200-500m depending on conditions
+- **5GHz range:** 5GHz has shorter range than 2.4GHz
 
 ### Serial Port Not Found
 ```bash
@@ -302,19 +364,32 @@ pio device monitor --port /dev/cu.usbmodem1101
 ### Build Errors
 ```bash
 # Clean and rebuild
-pio run -e seeed_xiao_esp32s3 -t clean
-pio run -e seeed_xiao_esp32s3
+pio run -e seeed_xiao_esp32c5 -t clean
+pio run -e seeed_xiao_esp32c5
 ```
 
 ### Buzzer Not Working
-- **Check wiring:** GPIO3 to buzzer positive, GND to buzzer negative
+- **Check wiring:** D2 pin to buzzer positive, GND to buzzer negative
 - **Verify buzzer type:** Must be passive buzzer (not active)
-- **Test with multimeter:** Should see PWM signal on GPIO3 during beeps
-- **Check serial output:** Should see "Buzzer initialized on GPIO3" message
+- **Test with multimeter:** Should see PWM signal on D2 during beeps
+- **Check serial output:** Should see "Buzzer initialized" message
 
+## Drones Using 5GHz RemoteID
 
+Most consumer drones currently use 2.4GHz, but 5GHz adoption is growing:
 
+**Primarily 2.4GHz:**
+- DJI (Mavic, Mini, Air, Phantom series)
+- Most Autel drones
+- Most consumer drones
 
+**Known/Potential 5GHz:**
+- Skydio (S2, X2, X10) - enterprise drones
+- Parrot ANAFI series - dual-band capable
+- Commercial/enterprise drones
+- Newer drones with WiFi 6
+
+The ESP32-C5 dual-band scanning ensures you catch drones regardless of which band they use.
 
 ## Legal & Safety
 
@@ -324,12 +399,10 @@ pio run -e seeed_xiao_esp32s3
 - Complies with FCC Part 15 (unlicensed receiver)
 - **Check local laws** regarding RF monitoring
 
-
-
 ## Credits & License
 
 ### Based On
-- **[OUI-SPY by Colonel Panic](https://github.com/colonelpanic8/oui-spy)** - Original BLE scanner with buzzer alerts and FreeRTOS architecture
+- **[OUI-SPY by Colonel Panic](https://github.com/colonelpanichacks/OUI-SPY)** - Original BLE scanner with buzzer alerts and FreeRTOS architecture
 - **OpenDroneID:** Open-source RemoteID protocol implementation
 - **ASTM F3411:** Standard Specification for Remote ID and Tracking
 - **[Hackster.io Article](https://www.hackster.io/news/colonel-panic-s-oui-spy-is-a-slick-bluetooth-low-energy-scanner-or-a-foxhunting-handset-c16927adad71)** - OUI-SPY project overview
@@ -347,9 +420,9 @@ Sky-Spy is an **official OUI-SPY firmware** from [colonelpanichacks](https://git
 All OUI-SPY firmware shares the same thread-safe, non-blocking buzzer architecture and professional FreeRTOS task design.
 
 ### Dependencies
-- **Arduino Framework:** ESP32 Arduino Core v3.2.0
-- **ArduinoJson:** v6.21.5
-- **ESP-IDF:** v5.4
+- **Arduino Framework:** ESP32 Arduino Core
+- **ArduinoJson:** v6.18.5+
+- **ESP-IDF:** v5.x
 - **BLE Libraries:** ESP32 BLE Arduino
 
 ### License
@@ -357,24 +430,11 @@ This project is provided as-is for educational and research purposes. Inherits l
 - OUI-SPY project (original hardware/software design)
 - OpenDroneID libraries (Apache 2.0)
 
-
-
-## Related Projects
-
-### OUI-SPY Ecosystem
-- **[OUI-SPY Main Project](https://github.com/colonelpanic8/oui-spy)** - Original BLE scanner with foxhunting mode
-- **[OUI-SPY on Hackster.io](https://www.hackster.io/news/colonel-panic-s-oui-spy-is-a-slick-bluetooth-low-energy-scanner-or-a-foxhunting-handset-c16927adad71)** - Project overview and documentation
-
-
-
 ## Support
 
 For issues, questions, or contributions:
-- **OUI-SPY Hardware:** Refer to [Colonel Panic's original repository](https://github.com/colonelpanic8/oui-spy)
-- **Drone RemoteID:** Check this fork's documentation
+- **OUI-SPY Hardware:** Refer to [Colonel Panic's repository](https://github.com/colonelpanichacks/OUI-SPY)
+- **Drone RemoteID:** Check this project's documentation
 - Review troubleshooting section above
 - Provide serial monitor output when reporting bugs
 - Include board type and PlatformIO version
-
-
-
