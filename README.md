@@ -16,6 +16,7 @@ Sky-Spy is part of the OUI-SPY firmware ecosystem:
 - **[OUI-SPY UniPwn](https://github.com/colonelpanichacks/Oui-Spy-UniPwn)** - Unitree robot exploitation system
 - **[Flock You](https://github.com/colonelpanichacks/flock-you)** - Flock Safety surveillance camera detection
 - **[Sky-Spy](https://github.com/colonelpanichacks/Sky-Spy)** - Drone RemoteID detection (this firmware)
+- **[Remote-ID-Spoofer](https://github.com/colonelpanichacks/Remote-ID-Spoofer)** - WiFi Remote ID spoofer and simulator with swarm mode
 
 **What Makes Sky-Spy Different:**
 - Targets OpenDroneID protocol (ASTM F3411) instead of general BLE devices
@@ -343,6 +344,7 @@ Sky-Spy is an **official OUI-SPY firmware** from [colonelpanichacks](https://git
 - **[OUI-SPY UniPwn](https://github.com/colonelpanichacks/Oui-Spy-UniPwn)** - Unitree robot security assessment tools
 - **[Flock You](https://github.com/colonelpanichacks/flock-you)** - Surveillance camera detection system
 - **[Sky-Spy](https://github.com/colonelpanichacks/Sky-Spy)** - Drone RemoteID detection (this project)
+- **[Remote-ID-Spoofer](https://github.com/colonelpanichacks/Remote-ID-Spoofer)** - WiFi Remote ID spoofer and simulator with swarm mode
 
 All OUI-SPY firmware shares the same thread-safe, non-blocking buzzer architecture and professional FreeRTOS task design.
 
