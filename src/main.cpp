@@ -81,68 +81,67 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 public:
   void onResult(BLEAdvertisedDevice device) override {
     int len = device.getPayloadLength();
-    if (len <= 0) return;
-      
     uint8_t* payload = device.getPayload();
-    if (len > 5 && payload[1] == 0x16 && payload[2] == 0xFA && 
-        payload[3] == 0xFF && payload[4] == 0x0D) {
-      uint8_t* mac = (uint8_t*) device.getAddress().getNative();
-      id_data* UAV = next_uav(mac);
-      UAV->last_seen = millis();
-      UAV->rssi = device.getRSSI();
-      memcpy(UAV->mac, mac, 6);
-      
-      uint8_t* odid = &payload[6];
-      switch (odid[0] & 0xF0) {
-        case 0x00: {
-          ODID_BasicID_data basic;
-          decodeBasicIDMessage(&basic, (ODID_BasicID_encoded*) odid);
-          strncpy(UAV->uav_id, (char*) basic.UASID, ODID_ID_SIZE);
-          break;
-        }
-        case 0x10: {
-          ODID_Location_data loc;
-          decodeLocationMessage(&loc, (ODID_Location_encoded*) odid);
-          UAV->lat_d = loc.Latitude;
-          UAV->long_d = loc.Longitude;
-          UAV->altitude_msl = (int) loc.AltitudeGeo;
-          UAV->height_agl = (int) loc.Height;
-          UAV->speed = (int) loc.SpeedHorizontal;
-          UAV->heading = (int) loc.Direction;
-          break;
-        }
-        case 0x40: {
-          ODID_System_data sys;
-          decodeSystemMessage(&sys, (ODID_System_encoded*) odid);
-          UAV->base_lat_d = sys.OperatorLatitude;
-          UAV->base_long_d = sys.OperatorLongitude;
-          break;
-        }
-        case 0x50: {
-          ODID_OperatorID_data op;
-          decodeOperatorIDMessage(&op, (ODID_OperatorID_encoded*) odid);
-          strncpy(UAV->op_id, (char*) op.OperatorId, ODID_ID_SIZE);
-          break;
-        }
-      }
-      UAV->flag = 1;
-      
-      // Trigger buzzer alert (thread-safe, non-blocking)
-      portENTER_CRITICAL_ISR(&buzzerMux);
-      if (!device_in_range) {
-        trigger_detection_beep = true;
-        device_in_range = true;
-        last_heartbeat = millis();
-      }
-      portEXIT_CRITICAL_ISR(&buzzerMux);
-      
-      {
-        id_data tmp = *UAV;
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        xQueueSendFromISR(printQueue, &tmp, &xHigherPriorityTaskWoken);
-        if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
-      }
+    if (!payload || len < 6 + (int)sizeof(ODID_BasicID_encoded)) return;
+
+    if (payload[1] != 0x16 || payload[2] != 0xFA ||
+        payload[3] != 0xFF || payload[4] != 0x0D) return;
+
+    uint8_t* odid = &payload[6];
+    int odid_len = len - 6;
+
+    memset(&UAS_data, 0, sizeof(UAS_data));
+    if ((odid[0] & 0xF0) == (ODID_MESSAGETYPE_PACKED << 4)) {
+      odid_message_process_pack(&UAS_data, odid, odid_len);
+    } else {
+      decodeOpenDroneID(&UAS_data, odid);
     }
+
+    bool useful = UAS_data.BasicIDValid[0] || UAS_data.LocationValid ||
+                  UAS_data.SystemValid     || UAS_data.OperatorIDValid;
+    if (!useful) return;
+
+    uint8_t* mac = (uint8_t*) device.getAddress().getNative();
+    if (!mac) return;
+
+    id_data* UAV = next_uav(mac);
+    if (memcmp(UAV->mac, mac, 6) != 0) {
+      memset(UAV, 0, sizeof(*UAV));
+      memcpy(UAV->mac, mac, 6);
+    }
+    UAV->last_seen = millis();
+    UAV->rssi = device.getRSSI();
+
+    if (UAS_data.BasicIDValid[0])
+      strncpy(UAV->uav_id, (char*)UAS_data.BasicID[0].UASID, ODID_ID_SIZE);
+    if (UAS_data.LocationValid) {
+      UAV->lat_d        = UAS_data.Location.Latitude;
+      UAV->long_d       = UAS_data.Location.Longitude;
+      UAV->altitude_msl = (int)UAS_data.Location.AltitudeGeo;
+      UAV->height_agl   = (int)UAS_data.Location.Height;
+      UAV->speed        = (int)UAS_data.Location.SpeedHorizontal;
+      UAV->heading      = (int)UAS_data.Location.Direction;
+    }
+    if (UAS_data.SystemValid) {
+      UAV->base_lat_d  = UAS_data.System.OperatorLatitude;
+      UAV->base_long_d = UAS_data.System.OperatorLongitude;
+    }
+    if (UAS_data.OperatorIDValid)
+      strncpy(UAV->op_id, (char*)UAS_data.OperatorID.OperatorId, ODID_ID_SIZE);
+    UAV->flag = 1;
+
+    portENTER_CRITICAL_ISR(&buzzerMux);
+    if (!device_in_range) {
+      trigger_detection_beep = true;
+      device_in_range = true;
+      last_heartbeat = millis();
+    }
+    portEXIT_CRITICAL_ISR(&buzzerMux);
+
+    id_data tmp = *UAV;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xQueueSendFromISR(printQueue, &tmp, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) portYIELD_FROM_ISR();
   }
 };
 
@@ -410,7 +409,7 @@ void loop() {
   
   // Status message every 60 seconds
   if ((current_millis - last_status) > 60000UL) {
-    Serial.println("{\"   [+] Device is active and scanning...\"}");
+    Serial.println("{\"status\":\"scanning\"}");
     last_status = current_millis;
   }
   
