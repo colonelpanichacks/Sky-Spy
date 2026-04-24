@@ -389,6 +389,11 @@ void setup() {
   esp_wifi_set_promiscuous_rx_cb(&callback);
   esp_wifi_set_channel(6, WIFI_SECOND_CHAN_NONE);
   
+  // Mute benign "Failed to allocate 0 bytes for payload" from the Arduino
+  // BLE lib when peripherals send zero-length ADV packets. Our callback
+  // already bails on those; this just keeps Serial clean for JSON consumers.
+  esp_log_level_set("BLEAdvertisedDevice", ESP_LOG_NONE);
+
   BLEDevice::init("DroneID");
   pBLEScan = BLEDevice::getScan();
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
