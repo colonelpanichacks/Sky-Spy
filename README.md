@@ -159,12 +159,75 @@ Sent every 60 seconds to confirm device operation.
 
 This scanner is designed as a USB serial data source for the mesh-mapper.py visualization tool:
 
-1. **Connect scanner** via USB
-2. **Run mesh-mapper.py** with appropriate serial port:
+1. **Install the Python dependencies**
    ```bash
-   python mesh-mapper.py --port /dev/cu.usbmodem1101
+   pip install -r requirements.txt
    ```
-3. **View real-time drone positions** on the map interface
+
+2. **Connect scanner** via USB
+
+3. **Run mesh-mapper.py**
+   ```bash
+   python mesh-mapper.py
+   ```
+   The web interface comes up on port 5000; use `--web-port N` to move it.
+
+4. **Pick the serial port** on the first-run screen at `/select_ports`, or click
+   SKIP to go straight to the map. The choice is saved to `selected_ports.json`
+   and reused on every later start.
+
+5. **View real-time drone positions** on the map interface
+
+## Offline Maps
+
+The interface is built to work with no internet. Everything the page loads -
+Leaflet, MapLibre GL, Leaflet.draw, Socket.IO and the Orbitron font - is
+vendored under `static/` and served by Flask off the local disk. Nothing is
+fetched from a CDN, so the UI, your drone tracks, pilot positions, geofences
+and telemetry all render fine on an air-gapped laptop.
+
+### The tiles caveat
+
+**Map tiles are the one part that is not bundled, and a fresh clone ships an
+empty `tiles/` directory.** The eight built-in basemaps are online sources
+(Esri, CartoDB, OSM, OpenTopoMap), so until you cache an area, the basemap is
+the one thing still reaching for the network.
+
+With no internet and no cached tiles you get a working map with a blank
+background: markers, tracks and geofences draw correctly over empty space,
+because those are computed from your own detections, not from the basemap.
+
+**So cache the area before you leave.** Do it while you still have a
+connection, and the map is genuinely self-contained in the field.
+
+### Caching an area
+
+From the running UI, open the **CACHE THIS AREA** panel in the sidebar: search
+a place or pick a region preset, set the zoom range, and start the job. Or from
+the command line:
+
+```bash
+# One area, satellite imagery, zoom 0-16
+python tools/cache_tiles.py \
+    --bbox -122.6 37.6 -122.3 37.9 \
+    --zoom 0 16 \
+    --source esriWorldImagery \
+    --out tiles/bay_area.mbtiles
+
+# Low-zoom global baseline, useful as a fallback everywhere
+python tools/cache_tiles.py --preset world --source cartoDarkMatter --out tiles/
+
+# Count the tiles without downloading them
+python tools/cache_tiles.py --preset world --source all --out tiles/ --dry-run
+```
+
+Caching is resumable - re-running skips tiles already stored. Anything in
+standard MBTiles format also works: drop the file into `tiles/` and refresh.
+
+One thing the tool will not do for you: OpenStreetMap's main tile server
+forbids bulk download, and nothing in the cacher enforces that - pass
+`--source osmStandard` with a wide bbox and it will happily try. Use Esri or
+CartoDB for anything large.
 
 ## Audio Alert Behavior
 
@@ -232,17 +295,30 @@ Core 0:                         Core 1:
 
 ### Project Structure
 ```
-remoteid-mesh-dualcore/
+Sky-Spy/
 ├── src/
 │   ├── main.cpp           # Main application code
 │   ├── opendroneid.h      # OpenDroneID protocol definitions
 │   ├── opendroneid.c      # Protocol parsing functions
 │   ├── odid_wifi.h        # WiFi-specific RemoteID structures
 │   └── wifi.c             # WiFi helper functions
+├── xiao-c5-5g/            # ESP32-C5 dual-band (2.4 + 5 GHz) firmware
 ├── include/               # Additional headers (empty by default)
 ├── lib/                   # Project-specific libraries (empty by default)
 ├── test/                  # Unit tests (empty by default)
 ├── platformio.ini         # Build configuration
+├── mesh-mapper.py         # Flask + Socket.IO web app (the map)
+├── requirements.txt       # Python dependencies for the web app
+├── tools/
+│   └── cache_tiles.py     # Offline tile cacher (writes MBTiles)
+├── static/                # Vendored UI assets - no CDN, works offline
+│   ├── leaflet/           # Leaflet 1.9.4 + marker images
+│   ├── maplibre/          # MapLibre GL + the Leaflet plugin
+│   ├── leaflet-draw/      # Geofence drawing tools
+│   ├── socketio/          # Socket.IO browser client
+│   ├── fonts/             # Orbitron 400/700
+│   └── styles/            # MapLibre vector style
+├── tiles/                 # Your cached .mbtiles go here (empty on clone)
 └── README.md              # This file
 ```
 
