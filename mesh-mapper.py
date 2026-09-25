@@ -13222,12 +13222,21 @@ def serial_reader(port):
                     
                 # Broadcast the updated status immediately
                 emit_serial_status()
-                    
+
+                # ESP32-S3 native USB re-enumerates its CDC interface while the
+                # firmware boots (~0.5s after any reset), which shows up as a
+                # SerialException on the first reads. Settle through that window
+                # before parsing JSON; reopening any sooner can land a DTR pulse
+                # inside the boot-strap sampling and wedge the chip in
+                # flash-download mode. Do NOT drain the input buffer here - the
+                # download-mode banner ("waiting for download") must reach the
+                # reader below so the node can be reset out of download mode.
+                time.sleep(2.5)
+
                 # Send a test command to wake up the device (reduce frequency to prevent disconnects)
                 try:
                     # Only send watchdog reset once, not continuously
                     if connection_attempts == 0:  # Only on first successful connection
-                        time.sleep(0.5)  # Small delay before sending command
                         ser.write(b'WATCHDOG_RESET\n')
                         logger.debug(f"Sent initial watchdog reset to {port}")
                 except Exception as e:
@@ -13257,7 +13266,30 @@ def serial_reader(port):
             if line:
                 data_received_count += 1
                 last_data_time = time.time()
-                
+
+                # Boot-ROM noise and flash-download mode need handling before
+                # JSON parsing: 'waiting for download' means a reopen pulsed
+                # DTR inside boot-strap sampling; a clean RTS toggle resets the
+                # chip with BOOT released, so it comes back in firmware mode.
+                if 'waiting for download' in line:
+                    logger.warning(f"{port}: node is in flash-download mode - attempting RTS reset to recover")
+                    try:
+                        # esptool-style reset with BOOT (DTR) released: pulsing
+                        # RTS alone reboots the chip into normal firmware mode.
+                        ser.dtr = False
+                        time.sleep(0.1)
+                        ser.rts = True
+                        time.sleep(0.2)
+                        ser.rts = False
+                        time.sleep(2.5)
+                        ser.reset_input_buffer()
+                    except Exception as e:
+                        logger.error(f"RTS reset failed on {port}: {e}")
+                    continue
+                if line.startswith(('rst:', 'ESP-ROM:', 'Build:')):
+                    logger.debug(f"Boot noise from {port}: {line[:80]}")
+                    continue
+
                 # Log all received data for debugging (limit length to avoid spam)
                 if data_received_count <= 10 or data_received_count % 50 == 0:
                     logger.info(f"Data from {port} (#{data_received_count}): {line[:200]}")
@@ -13328,10 +13360,10 @@ def serial_reader(port):
         except (serial.SerialException, OSError) as e:
             serial_connected_status[port] = False
             logger.error(f"SerialException/OSError on {port}: {e}")
-            
+
             # Broadcast the updated status immediately
             emit_serial_status()
-            
+
             try:
                 if ser and ser.is_open:
                     ser.close()
@@ -13340,15 +13372,17 @@ def serial_reader(port):
             ser = None
             with serial_objs_lock:
                 serial_objs.pop(port, None)
-            time.sleep(1)
-            
+            # The ESP32-S3 needs >1s after a reset before USB is stable again;
+            # reopening inside that window straps it into download mode.
+            time.sleep(4)
+
         except Exception as e:
             serial_connected_status[port] = False
             logger.error(f"Unexpected error on {port}: {e}")
-            
+
             # Broadcast the updated status immediately
             emit_serial_status()
-            
+
             try:
                 if ser and ser.is_open:
                     ser.close()
@@ -13357,7 +13391,7 @@ def serial_reader(port):
             ser = None
             with serial_objs_lock:
                 serial_objs.pop(port, None)
-            time.sleep(1)
+            time.sleep(4)
     
     with SERIAL_THREADS_LOCK:
         if SERIAL_THREADS.get(port) is threading.current_thread():
