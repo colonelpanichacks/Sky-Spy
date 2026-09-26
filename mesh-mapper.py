@@ -1766,6 +1766,18 @@ def update_detection(detection):
             if "faa_data" in detection:
                 write_to_faa_cache(mac, detection.get("basic_id", ""), detection["faa_data"])
         
+        # Merge instead of stomp: coord-less re-reports (DroneScout Bridge
+        # BasicID-only relay posts arrive at 1Hz) must not wipe coordinates the
+        # node already established - that created "no GPS, never expires"
+        # zombies and made every subsequent real frame look like a fresh
+        # detection.
+        prev_det = tracked_pairs.get(mac)
+        if prev_det:
+            for k in ('drone_lat', 'drone_long', 'drone_altitude',
+                      'pilot_lat', 'pilot_long'):
+                if not detection.get(k) and prev_det.get(k):
+                    detection[k] = prev_det[k]
+
         # Forward this no-GPS detection to the client
         tracked_pairs[mac] = detection
         detection_history.append(detection.copy())
@@ -2014,7 +2026,13 @@ def should_trigger_webhook_earliest(detection, mac):
     # Update tracking state
     if should_trigger:
         backend_seen_drones.add(mac)
-    backend_previous_active[mac] = active_now
+    # Only GPS-bearing frames may change the active state: a coord-less frame
+    # computes active_now=False and would reset was_active, making the next
+    # real frame re-fire the detection alert on every cycle (bridge relay
+    # flap). Keep the last GPS-derived state; age-out still happens naturally
+    # because active_now tests last_update freshness.
+    if valid_drone:
+        backend_previous_active[mac] = active_now
     
     # Clean up no-GPS alerts when transmission stops
     if not has_recent_transmission:
