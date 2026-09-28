@@ -12318,8 +12318,9 @@ async function updateData() {
       if (isNoGpsDrone) {
         // Ensure this MAC is in the persistent list for display
         if (!persistentMACs.includes(mac)) { persistentMACs.push(mac); }
-      } else if (!hasRecentTransmission) {
-        // Reset alert state when transmission stops
+      } else if ((currentTime - det.last_update) > STALE_THRESHOLD) {
+        // Reset alert state only when the drone has fully staled out.
+        // Clearing on any gap >5s made once-per-minute beacons re-alert every cycle.
         alertedNoGpsDrones.delete(mac);
       }
       
@@ -12457,9 +12458,10 @@ async function updateData() {
           alertedNoGpsDrones.add(det.mac);
         }
       } else {
-        // Remove no-GPS styling and reset alert state when GPS is acquired or transmission stops
+        // Remove no-GPS styling and reset alert state when GPS is acquired or the
+        // drone fully stales out (not merely quiet >5s, or 1/min beacons re-alert)
         droneElem.classList.remove('no-gps');
-        if (!hasRecentTransmission) {
+        if ((currentTime - det.last_update) > STALE_THRESHOLD) {
           alertedNoGpsDrones.delete(det.mac);
         }
       }
