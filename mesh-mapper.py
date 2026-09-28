@@ -13334,11 +13334,17 @@ def serial_reader(port):
                     if 'mac' in detection:
                         last_mac_by_port[port] = detection['mac']
                         logger.debug(f"Found MAC in detection: {detection['mac']}")
-                    elif port in last_mac_by_port:
+                    elif port in last_mac_by_port and any(
+                            k in detection for k in ('drone_lat', 'pilot_lat', 'basic_id', 'remote_id', 'rssi')):
+                        # Multi-part telemetry continuation of the last detection:
+                        # the frame carries real data but no MAC, so borrow it.
                         detection['mac'] = last_mac_by_port[port]
                         logger.debug(f"Using cached MAC for {port}: {detection['mac']}")
-                    else:
-                        logger.warning(f"No MAC found in detection from {port}: {detection}")
+                    # Frames with no MAC and no telemetry ({"status":"scanning"},
+                    # "Detection complete", heartbeats) must NOT get the cached MAC
+                    # stamped on them: they are status, not fresh sightings, and
+                    # refreshing last_update from them pinned every tracked MAC
+                    # active forever (status frames arrive on a timer).
                     
                     # Skip status messages without detection data
                     if not any(key in detection for key in ['mac', 'drone_lat', 'pilot_lat', 'basic_id', 'remote_id']):
