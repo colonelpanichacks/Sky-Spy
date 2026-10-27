@@ -431,9 +431,9 @@ All OUI-SPY firmware shares the same thread-safe, non-blocking buzzer architectu
 - **BLE Libraries:** ESP32 BLE Arduino
 
 ### License
-This project is provided as-is for educational and research purposes. Inherits licensing from:
-- OUI-SPY project (original hardware/software design)
-- OpenDroneID libraries (Apache 2.0)
+MIT, see [LICENSE](LICENSE). The bundled OpenDroneID files (`opendroneid.c`, `opendroneid.h`, `odid_wifi.h`, `wifi.c`) are Copyright Intel Corporation and stay under the Apache License 2.0, as their headers state.
+
+Provided as-is for educational and research purposes.
 
 
 
