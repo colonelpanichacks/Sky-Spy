@@ -6,3 +6,11 @@
 *.vscode/
 
 node-mode-dualcore/.pio/build/
+
+# mesh-mapper settings written at runtime: TAK passwords and client key,
+# the FAA lookup switch
+tak_config.json
+tak_config.json.tmp
+tak_certs/
+faa_auto.json
+faa_auto.json.tmp
