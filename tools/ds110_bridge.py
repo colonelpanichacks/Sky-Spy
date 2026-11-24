@@ -23,6 +23,13 @@ Usage:
 Note: macOS will prompt for Bluetooth permission for the terminal/Python on
 first scan. On macOS bleak reports a CoreBluetooth UUID instead of the real
 BLE MAC — only used as a fallback key when no BasicID has been decoded.
+
+Optional: with the `remoteid` package installed (`pip install remoteid`),
+each relayed frame is also fed to a per-transmitter trust tracker, and the
+payload posted to the mapper gains a "trust" field: verdict
+(authenticated/plausible/suspicious/spoofed), alert flag and reasons.
+Without the package the bridge runs exactly as before, just without the
+field.
 """
 
 import argparse
@@ -37,6 +44,11 @@ import requests
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
+
+try:
+    import remoteid
+except ImportError:
+    remoteid = None
 
 ODID_UUID = "0000fffa-0000-1000-8000-00805f9b34fb"
 ODID_APP_CODE = 0x0D
@@ -129,6 +141,7 @@ class DroneState:
         self.direction = None
         self.pilot_lat = 0.0
         self.pilot_lon = 0.0
+        self.trust = None        # last trust verdict for this drone, if remoteid is installed
         self.last_seen = time.monotonic()
         self.last_posted = 0.0
 
@@ -145,6 +158,8 @@ class DroneState:
         }
         if self.basic_id:
             p["basic_id"] = self.basic_id
+        if self.trust:
+            p["trust"] = self.trust
         return p
 
 
@@ -162,6 +177,13 @@ class Bridge:
         self.ads_seen = 0
         self.last_heartbeat = 0.0
         self.last_hb_warning = 0.0
+        # Optional per-transmitter trust tracker (remoteid package). Frames
+        # from the same advertiser are judged as one transmitter: impossible
+        # jumps, counter reuse and replayed signatures raise the verdict.
+        self.tracker = remoteid.Tracker() if remoteid is not None else None
+        # advertiser address -> currently alerting, so the warning logs once
+        # per transition instead of once per frame
+        self._alerted: set[str] = set()
         # advertiser address -> most recent non-placeholder basic_id from it
         self.last_id_by_advertiser: dict[str, str] = {}
         # tracked key -> DroneState
@@ -169,6 +191,31 @@ class Bridge:
         # advertiser address -> basic_id currently being merged (relay cycles
         # through drones; location/system ads attach to the latest BasicID)
         self.advertiser_current: dict[str, str] = {}
+
+    # -- trust verdicts -------------------------------------------------------
+
+    def judge(self, advertiser: str, data: bytes, rssi) -> dict | None:
+        """Feed one relayed frame to the trust tracker and return a small
+        verdict dict for the payload, or None when remoteid is missing or
+        the frame does not decode. Never raises: a malformed relay must not
+        kill detection."""
+        if self.tracker is None:
+            return None
+        try:
+            v = self.tracker.ingest(data, "ble_service_data",
+                                    address=advertiser, rssi=rssi)
+        except ValueError:
+            return None
+        if v.is_alert and advertiser not in self._alerted:
+            self._alerted.add(advertiser)
+            logger.warning("trust alert: %s verdict=%s reasons=%s",
+                           advertiser, v.verdict, ",".join(v.reasons) or "-")
+        elif not v.is_alert and advertiser in self._alerted:
+            self._alerted.discard(advertiser)
+            logger.info("trust alert cleared: %s verdict=%s", advertiser, v.verdict)
+        return {"verdict": v.verdict, "is_alert": v.is_alert,
+                "score": v.score, "reasons": list(v.reasons),
+                "spoofer": bool(v.spoofer)}
 
     # -- BLE callback --------------------------------------------------------
 
@@ -182,6 +229,7 @@ class Bridge:
         msg = data[2:2 + MSG_LEN]
         msg_type = (msg[0] & 0xF0) >> 4
         advertiser = device.address
+        trust = self.judge(advertiser, data, adv.rssi)
 
         if msg_type == MSG_BASIC_ID:
             basic_id = decode_basic_id(msg)
@@ -203,6 +251,8 @@ class Bridge:
                 logger.info("New drone via BLE: basic_id=%s key=%s", basic_id, key)
             drone.basic_id = basic_id
             drone.rssi = adv.rssi
+            if trust is not None:
+                drone.trust = trust
             drone.last_seen = time.monotonic()
 
         elif msg_type in (MSG_LOCATION, MSG_SYSTEM):
@@ -223,6 +273,8 @@ class Bridge:
                 op = decode_system(msg)
                 drone.pilot_lat, drone.pilot_lon = op["pilot_lat"], op["pilot_lon"]
             drone.rssi = adv.rssi
+            if trust is not None:
+                drone.trust = trust
             drone.last_seen = time.monotonic()
 
         if self.list_only:
@@ -288,6 +340,9 @@ class Bridge:
         await scanner.start()
         logger.info("BLE scan started%s",
                     " (list-only, no POSTs)" if self.list_only else f", posting to {self.url}")
+        if self.tracker is None:
+            logger.info("remoteid not installed: trust verdicts off "
+                        "(pip install remoteid to enable)")
         try:
             await self.post_loop()
         finally:
